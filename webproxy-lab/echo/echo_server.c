@@ -16,7 +16,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "usage: %s <port>\n", argv[0]);
         exit(0);
     }
-
+         
     // 주어진 포트로 수신용 서버 소켓 생성
     listenfd = open_listenfd(argv[1]);
 

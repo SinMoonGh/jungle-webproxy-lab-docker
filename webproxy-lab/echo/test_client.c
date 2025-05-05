@@ -1,6 +1,5 @@
 // test_client.c
-#include <stdio.h>
-#include "csapp.h"
+#include"echo_client.h"
 
 int main() {
     int clientfd;
