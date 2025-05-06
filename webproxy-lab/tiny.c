@@ -6,7 +6,7 @@
  * Updated 11/2019 droh
  *   - Fixed sprintf() aliasing issue in serve_static(), and clienterror().
  */
-#include "../csapp.h"
+#include "csapp.h"
 
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
