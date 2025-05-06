@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "csapp.h": "c",
+        "wait.h": "c"
+    }
+}

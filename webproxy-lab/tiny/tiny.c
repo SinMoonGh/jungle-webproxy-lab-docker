@@ -16,6 +16,7 @@ void get_filetype(char *filename, char *filetype);
 void serve_dynamic(int fd, char *filename, char *cgiargs);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg,
                  char *longmsg);
+void serve_static_headers(int fd, char *filename, int filesize);
 
 int main(int argc, char **argv)
 {
@@ -60,7 +61,7 @@ void doit(int fd) {
 
   // 요청 줄 읽기
   Rio_readinitb(&rio, fd);                 // rio 구조체를 fd로 초기화
-  Rio_readlineb(&rio, buf, MAXLINE);       // 요청 줄 한 줄 읽음
+  if (!Rio_readlineb(&rio, buf, MAXLINE)) return;       // 요청 줄 한 줄 읽음
   printf("Request headers:\n");
   printf("%s", buf);                       // 요청 줄 출력 (예: GET /index.html HTTP/1.0)
 
@@ -68,7 +69,7 @@ void doit(int fd) {
   sscanf(buf, "%s %s %s", method, uri, version);
 
   // Tiny는 GET 메서드만 지원하므로, 다른 메서드는 에러 응답
-  if (strcasecmp(method, "GET")) {
+  if (strcasecmp(method, "GET") && strcasecmp(method, "HEAD")) {
     clienterror(fd, method, "501", "Not implemented", "Tiny does not implement this method");
     return;
   }
@@ -92,8 +93,13 @@ void doit(int fd) {
       clienterror(fd, filename, "403", "Forbidden", "Tiny couldn't read the file");
       return;
     }
-    // 정적 콘텐츠 제공
-    serve_static(fd, filename, sbuf.st_size);
+    // 만약 HEAD 메서드라면, 본문 없이 헤더만 전송
+    if (strcasecmp(method, "HEAD") == 0) {
+      serve_static_headers(fd, filename, sbuf.st_size);
+    } else {
+      // GET 메서드일 경우 본문도 함께 전송
+      serve_static(fd, filename, sbuf.st_size);
+    }
   } else {
     // 동적 콘텐츠일 경우: 일반 파일이며 실행 권한이 있어야 함
     if (!(S_ISREG(sbuf.st_mode)) || !(S_IXUSR & sbuf.st_mode)) {
@@ -244,6 +250,7 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
   char *emptylist[] = {NULL};      // CGI 프로그램에 넘길 인자 리스트 (빈 리스트)
 
   /* 클라이언트에게 기본적인 HTTP 응답 헤더 전송 */
+  // printf("")
   sprintf(buf, "HTTP/1.0 200 OK\r\n");
   Rio_writen(fd, buf, strlen(buf));  // 상태 줄 전송
 
@@ -264,4 +271,23 @@ void serve_dynamic(int fd, char *filename, char *cgiargs) {
 
   /* 부모 프로세스는 자식이 끝날 때까지 기다림 */
   Wait(NULL);  // 좀비 프로세스 방지
+}
+
+void serve_static_headers(int fd, char *filename, int filesize) {
+  char filetype[MAXLINE], buf[MAXBUF];  // MIME 타입, 응답 헤더를 저장할 버퍼
+
+  // 파일 타입 결정
+  get_filetype(filename, filetype);
+
+  // 응답 헤더 생성
+  sprintf(buf, "HTTP/1.0 200 OK\r\n");
+  sprintf(buf, "%sServer: Tiny Web Server\r\n", buf);
+  sprintf(buf, "%sConnection: close\r\n", buf);
+  sprintf(buf, "%sContent-length: %d\r\n", buf, filesize);
+  sprintf(buf, "%sContent-type: %s\r\n\r\n", buf, filetype);
+
+  // 헤더 전송
+  Rio_writen(fd, buf, strlen(buf));
+  printf("Response headers:\n");
+  printf("%s", buf);  // 터미널에도 출력 (디버깅용)
 }
