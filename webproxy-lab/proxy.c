@@ -8,6 +8,7 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
+void sigchild_handler(int sig);
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr =
@@ -28,17 +29,19 @@ int main(int argc, char **argv)
     exit(1);
   }
 
+  Signal(SIGCHLD, sigchild_handler);
   listenfd = Open_listenfd(argv[1]);
   while (1)
   {
-    clientlen = sizeof(clientaddr);
-    connfd = Accept(listenfd, (SA *)&clientaddr,
-                    &clientlen); // line:netp:tiny:accept
-    Getnameinfo((SA *)&clientaddr, clientlen, hostname, MAXLINE, port, MAXLINE,
-                0);
-    printf("Accepted connection from (%s, %s)\n", hostname, port);
-    doit(connfd);  // line:netp:tiny:doit
-    Close(connfd); // line:netp:tiny:close
+    clientlen = sizeof(struct sockaddr_storage);
+    connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+    if(Fork() == 0){
+      Close(listenfd);
+      doit(connfd);
+      Close(connfd);
+      exit(0);
+    }
+    Close(connfd);
   }
 }
 
@@ -155,4 +158,10 @@ void make_header(char *header, char *hostname, char *path, rio_t *rio, char *met
   // 최종 헤더 조립
   sprintf(header, "%s%s%s%s%s%s\r\n",
           request_line, host_hdr, conn_hdr, proxy_conn_hdr, user_agent_hdr, other_hdrs);
+}
+
+void sigchild_handler(int sig){
+  while (waitpid(-1, 0, WNOHANG) > 0)
+    ;
+  return;
 }
