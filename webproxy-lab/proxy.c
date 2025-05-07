@@ -8,7 +8,7 @@
 void doit(int fd);
 void read_requesthdrs(rio_t *rp);
 void clienterror(int fd, char *cause, char *errnum, char *shortmsg, char *longmsg);
-void sigchild_handler(int sig);
+void *thread(void *vargp);
 
 /* You won't lose style points for including this long line in your code */
 static const char *user_agent_hdr =
@@ -17,10 +17,10 @@ static const char *user_agent_hdr =
 
 int main(int argc, char **argv)
 {
-  int listenfd, connfd;
-  char hostname[MAXLINE], port[MAXLINE];
+  int listenfd, *connfdp;
   socklen_t clientlen;
   struct sockaddr_storage clientaddr;
+  pthread_t tid;
 
   /* Check command line args */
   if (argc != 2)
@@ -29,19 +29,14 @@ int main(int argc, char **argv)
     exit(1);
   }
 
-  Signal(SIGCHLD, sigchild_handler);
+  
   listenfd = Open_listenfd(argv[1]);
   while (1)
   {
-    clientlen = sizeof(struct sockaddr_storage);
-    connfd = Accept(listenfd, (SA *) &clientaddr, &clientlen);
-    if(Fork() == 0){
-      Close(listenfd);
-      doit(connfd);
-      Close(connfd);
-      exit(0);
-    }
-    Close(connfd);
+    clientlen=sizeof(struct sockaddr_storage);
+    connfdp = Malloc(sizeof(int));
+    *connfdp = Accept(listenfd, (SA *) &clientaddr, &clientlen);
+    Pthread_create(&tid, NULL, thread, connfdp);
   }
 }
 
@@ -160,8 +155,12 @@ void make_header(char *header, char *hostname, char *path, rio_t *rio, char *met
           request_line, host_hdr, conn_hdr, proxy_conn_hdr, user_agent_hdr, other_hdrs);
 }
 
-void sigchild_handler(int sig){
-  while (waitpid(-1, 0, WNOHANG) > 0)
-    ;
-  return;
+
+void *thread(void *vargp){
+  int connfd = *((int *)vargp);
+  Pthread_detach(pthread_self());
+  Free(vargp);
+  doit(connfd);
+  Close(connfd);
+  return NULL;
 }
